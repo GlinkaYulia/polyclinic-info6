@@ -1,0 +1,541 @@
+openapi: 3.0.3
+info:
+  title: API інформаційно-довідкової системи поліклініки
+  version: 3.0.0
+  description: |
+    REST API довідника лікарів, автентифікації та записів на прийом.
+    Зміна довідників лікарів і відділень (POST, PUT, DELETE) дозволена лише користувачам із роллю admin.
+    Автентифікація виконується через сесійну cookie polyclinic.session (HttpOnly).
+servers:
+  - url: http://localhost:4567
+tags:
+  - name: Лікарі
+  - name: Відділення
+  - name: Автентифікація
+  - name: Записи на прийом
+  - name: Службові
+  - name: AI
+paths:
+  /api/health:
+    get:
+      tags: [Службові]
+      summary: Перевірка стану сервера
+      responses:
+        '200':
+          description: Сервер працює
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+  /api/doctors:
+    get:
+      tags: [Лікарі]
+      summary: Список лікарів
+      parameters:
+        - name: search
+          in: query
+          description: Пошук за ПІБ або спеціальністю
+          schema: { type: string }
+        - name: department_id
+          in: query
+          description: Фільтр за відділенням
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Масив лікарів
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Doctor' }
+    post:
+      tags: [Лікарі]
+      summary: Створити лікаря
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DoctorInput' }
+      responses:
+        '201':
+          description: Лікаря створено
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Doctor' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /api/doctors/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Лікарі]
+      summary: Отримати лікаря за id
+      responses:
+        '200':
+          description: Лікар
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Doctor' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Лікарі]
+      summary: Оновити лікаря (повна заміна)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DoctorInput' }
+      responses:
+        '200':
+          description: Оновлений лікар
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Doctor' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    delete:
+      tags: [Лікарі]
+      summary: Видалити лікаря
+      responses:
+        '204':
+          description: Видалено
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/departments:
+    get:
+      tags: [Відділення]
+      summary: Список відділень із кількістю лікарів
+      responses:
+        '200':
+          description: Масив відділень
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Department' }
+    post:
+      tags: [Відділення]
+      summary: Створити відділення
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DepartmentInput' }
+      responses:
+        '201':
+          description: Відділення створено
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Department' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /api/departments/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Відділення]
+      summary: Отримати відділення за id
+      responses:
+        '200':
+          description: Відділення
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Department' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Відділення]
+      summary: Видалити відділення
+      description: Якщо у відділенні є лікарі, повертається 409.
+      responses:
+        '204':
+          description: Видалено
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/auth/register:
+    post:
+      tags: [Автентифікація]
+      summary: Реєстрація (відкриває сесію)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterInput' }
+      responses:
+        '201':
+          description: Користувача створено
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '409': { $ref: '#/components/responses/ValidationFailedOrConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /api/auth/login:
+    post:
+      tags: [Автентифікація]
+      summary: Вхід
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginInput' }
+      responses:
+        '200':
+          description: Успішний вхід
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401':
+          description: Невірний email або пароль
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /api/auth/logout:
+    post:
+      tags: [Автентифікація]
+      summary: Вихід (очищає сесію)
+      responses:
+        '204':
+          description: Сесію закрито
+  /api/auth/me:
+    get:
+      tags: [Автентифікація]
+      summary: Поточний користувач
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Користувач
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/appointments/busy:
+    get:
+      tags: [Записи на прийом]
+      summary: Зайняті години лікаря на дату
+      parameters:
+        - name: doctor_id
+          in: query
+          required: true
+          schema: { type: integer }
+        - name: date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Масив зайнятих годин
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: string, example: '09:30' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/appointments:
+    get:
+      tags: [Записи на прийом]
+      summary: Мої записи
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Записи поточного користувача
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Appointment' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Записи на прийом]
+      summary: Створити запис на прийом
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AppointmentInput' }
+      responses:
+        '201':
+          description: Запис створено
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Appointment' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: Час уже зайнятий
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /api/appointments/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    delete:
+      tags: [Записи на прийом]
+      summary: Скасувати власний запис
+      security:
+        - cookieAuth: []
+      responses:
+        '204':
+          description: Запис видалено
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/ai/status:
+    get:
+      tags: [AI]
+      summary: Стан інтеграції з AI (без секретів)
+      responses:
+        '200':
+          description: Провайдер і стан налаштування
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  provider: { type: string, enum: [gemini, openai, mock] }
+                  configured: { type: boolean }
+  /api/ai/chat:
+    post:
+      tags: [AI]
+      summary: Чат-помічник поліклініки
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChatInput' }
+      responses:
+        '200':
+          description: Відповідь помічника
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reply: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '502':
+          description: Помилка AI-сервісу
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503':
+          description: AI не налаштовано
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '504':
+          description: AI-сервіс не відповів вчасно
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /api/ai/analyze:
+    post:
+      tags: [AI]
+      summary: Аналіз відгуку пацієнта
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string, minLength: 10, maxLength: 1000 }
+      responses:
+        '200':
+          description: Результат аналізу
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewAnalysis' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '502':
+          description: Помилка AI-сервісу
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: polyclinic.session
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+  responses:
+    BadRequest:
+      description: Некоректний запит (невалідний JSON або id)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Ресурс не знайдено
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Конфлікт (дублікат або пов’язані записи)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationFailed:
+      description: Помилка валідації
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ValidationError' }
+    Unauthorized:
+      description: Потрібна авторизація
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    TooManyRequests:
+      description: Забагато спроб
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationFailedOrConflict:
+      description: Email уже зареєстровано
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ValidationError' }
+  schemas:
+    Doctor:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        full_name: { type: string, example: Коваленко Олена Іванівна }
+        specialty: { type: string, example: Терапевт }
+        department_id: { type: integer, example: 1 }
+        department: { type: string, example: Терапевтичне }
+        room: { type: string, nullable: true, example: '101' }
+        schedule: { type: string, nullable: true, example: 'Пн–Пт, 08:00–14:00' }
+        experience_years: { type: integer, example: 15 }
+    DoctorInput:
+      type: object
+      required: [full_name, specialty, department_id]
+      properties:
+        full_name: { type: string, maxLength: 150 }
+        specialty: { type: string, maxLength: 100 }
+        department_id: { type: integer, minimum: 1 }
+        room: { type: string, maxLength: 10, nullable: true }
+        schedule: { type: string, maxLength: 100, nullable: true }
+        experience_years: { type: integer, minimum: 0, maximum: 70, default: 0 }
+    Department:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        doctors_count: { type: integer }
+    DepartmentInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 100 }
+        description: { type: string, nullable: true }
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+    ValidationError:
+      type: object
+      properties:
+        error: { type: string, example: Помилка валідації }
+        errors:
+          type: object
+          additionalProperties: { type: string }
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        email: { type: string, format: email }
+        full_name: { type: string }
+        role: { type: string, enum: [patient, admin] }
+    RegisterInput:
+      type: object
+      required: [full_name, email, password]
+      properties:
+        full_name: { type: string, minLength: 2, maxLength: 150 }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8, description: Літера та цифра обов’язкові }
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    AppointmentInput:
+      type: object
+      required: [doctor_id, patient_name, phone, appointment_date, appointment_time]
+      properties:
+        doctor_id: { type: integer }
+        patient_name: { type: string }
+        phone: { type: string, example: '+380501234567' }
+        appointment_date: { type: string, format: date }
+        appointment_time: { type: string, example: '09:30', description: 08:00–18:30 із кроком 30 хвилин }
+        comment: { type: string, maxLength: 500, nullable: true }
+    Appointment:
+      type: object
+      properties:
+        id: { type: integer }
+        doctor_id: { type: integer }
+        doctor_name: { type: string }
+        specialty: { type: string }
+        room: { type: string, nullable: true }
+        patient_name: { type: string }
+        phone: { type: string }
+        appointment_date: { type: string, format: date }
+        appointment_time: { type: string, example: '09:30' }
+        comment: { type: string, nullable: true }
+    ChatInput:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items:
+            type: object
+            required: [role, content]
+            properties:
+              role: { type: string, enum: [user, assistant] }
+              content: { type: string, maxLength: 500 }
+    ReviewAnalysis:
+      type: object
+      properties:
+        sentiment: { type: string, enum: [positive, neutral, negative] }
+        score: { type: number, minimum: -1, maximum: 1 }
+        topics:
+          type: array
+          maxItems: 5
+          items: { type: string }
+        summary: { type: string }
+        suggested_reply: { type: string }
